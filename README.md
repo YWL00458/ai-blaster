@@ -1,2 +1,2 @@
 # ai-blaster
-english typing game
+for Kyle & Sean
