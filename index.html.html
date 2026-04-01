@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI BLASTER — Type to Shoot!</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --cyan: #00f5ff;
+    --pink: #ff006e;
+    --yellow: #ffbe0b;
+    --green: #06d6a0;
+    --orange: #ff7c43;
+    --bg: #020814;
+    --grid: rgba(0,245,255,0.06);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    font-family: 'Share Tech Mono', monospace;
+    color: var(--cyan);
+    overflow: hidden;
+    height: 100vh; width: 100vw;
+    user-select: none;
+  }
+
+  body::before {
+    content:'';
+    position:fixed; inset:0;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events:none; z-index:0;
+  }
+
+  #wrap { position:relative; width:100vw; height:100vh; display:flex; flex-direction:column; z-index:1; }
+
+  /* ── HUD ── */
+  #hud {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:8px 16px;
+    background:rgba(0,0,0,0.75);
+    border-bottom:1px solid var(--cyan);
+    box-shadow:0 0 20px rgba(0,245,255,0.12);
+    flex-shrink:0; flex-wrap:wrap; gap:6px;
+  }
+  .hb { display:flex; flex-direction:column; align-items:center; min-width:52px; }
+  .hl { font-size:8px; color:rgba(0,245,255,0.45); letter-spacing:2px; }
+  .hv { font-family:'Orbitron',monospace; font-size:16px; font-weight:700; }
+  #sc { color:var(--yellow); text-shadow:0 0 8px var(--yellow); }
+  #lv { color:var(--pink);   text-shadow:0 0 8px var(--pink); }
+  #ll { color:var(--green);  text-shadow:0 0 8px var(--green); }
+  #bm { color:var(--orange); text-shadow:0 0 8px var(--orange); }
+  #ttl { font-family:'Orbitron',monospace; font-size:13px; font-weight:900; color:var(--cyan); text-shadow:0 0 12px var(--cyan); letter-spacing:3px; }
+
+  #bomb-btn {
+    cursor:pointer;
+    background:rgba(255,124,67,0.15);
+    border:2px solid var(--orange);
+    border-radius:6px;
+    padding:4px 12px;
+    color:var(--orange);
+    font-family:'Orbitron',monospace;
+    font-size:11px; font-weight:700; letter-spacing:2px;
+    transition:all .2s; flex-shrink:0;
+  }
+  #bomb-btn:hover { background:rgba(255,124,67,0.3); box-shadow:0 0 14px var(--orange); }
+  #bomb-btn.disabled { opacity:0.35; cursor:default; pointer-events:none; }
+
+  /* ── Keywords bar ── */
+  #kwbar {
+    padding:3px 16px;
+    background:rgba(0,0,0,0.45);
+    border-bottom:1px solid rgba(0,245,255,0.15);
+    display:flex; gap:7px; align-items:center; flex-wrap:wrap;
+    flex-shrink:0; min-height:28px;
+  }
+  #kwlabel { font-size:8px; color:rgba(0,245,255,0.35); letter-spacing:2px; }
+  .kwbadge {
+    background:rgba(6,214,160,0.12); border:1px solid var(--green);
+    color:var(--green); font-size:9px; padding:2px 7px; border-radius:20px;
+    text-shadow:0 0 5px var(--green); animation:pop .3s ease;
+  }
+  @keyframes pop { 0%{transform:scale(0);opacity:0} 70%{transform:scale(1.2)} 100%{transform:scale(1);opacity:1} }
+
+  /* ── Game area ── */
+  #area { position:relative; flex:1; overflow:hidden; }
+  canvas { position:absolute; top:0; left:0; width:100%; height:100%; }
+
+  /* ── Type strip at bottom ── */
+  #type-strip {
+    position:absolute; bottom:0; left:0; right:0;
+    background:rgba(0,0,0,0.78);
+    border-top:1px solid rgba(0,245,255,0.2);
+    padding:7px 16px;
+    display:flex; align-items:center; justify-content:center; gap:20px;
+    z-index:8;
+  }
+  #hint-txt { font-size:10px; color:rgba(0,245,255,0.4); letter-spacing:2px; }
+  #typed-key {
+    font-family:'Orbitron',monospace;
+    font-size:28px; font-weight:900; letter-spacing:4px;
+    color:var(--cyan); text-shadow:0 0 12px var(--cyan);
+    min-width:50px; text-align:center;
+    transition:color .1s, text-shadow .1s;
+  }
+
+  /* ── Word challenge panel ── */
+  #word-panel {
+    position:absolute; top:12px; left:50%; transform:translateX(-50%);
+    background:rgba(0,0,0,0.9);
+    border:2px solid var(--yellow);
+    box-shadow:0 0 24px rgba(255,190,11,0.4);
+    padding:10px 28px; border-radius:6px; text-align:center;
+    z-index:10; display:none; min-width:320px;
+  }
+  #wlabel  { font-size:9px; color:var(--yellow); letter-spacing:3px; margin-bottom:4px; }
+  #wtarget { font-family:'Orbitron',monospace; font-size:28px; font-weight:900; letter-spacing:10px; color:#fff; }
+  #wtyped  { font-family:'Orbitron',monospace; font-size:14px; letter-spacing:6px; color:var(--green); margin-top:2px; min-height:20px; }
+  #wtbar   { margin-top:6px; height:4px; background:rgba(255,255,255,0.1); border-radius:2px; overflow:hidden; }
+  #wtfill  { height:100%; background:var(--yellow); border-radius:2px; }
+
+  /* ── Bomb flash ── */
+  #bflash { position:absolute; inset:0; background:rgba(255,124,67,0.2); pointer-events:none; z-index:12; opacity:0; transition:opacity .3s; }
+
+  /* ── Keyboard cheat sheet ── */
+  #kbover {
+    position:absolute; inset:0; background:rgba(2,8,20,0.94);
+    z-index:14; display:none; flex-direction:column;
+    align-items:center; justify-content:center; padding:20px; gap:12px;
+  }
+  #kbover h2 { font-family:'Orbitron',monospace; font-size:15px; color:var(--orange); letter-spacing:3px; text-shadow:0 0 12px var(--orange); }
+  .kbrow { display:flex; gap:7px; }
+  .kbkey {
+    width:38px; height:38px;
+    border:1.5px solid rgba(0,245,255,0.4);
+    border-radius:5px; background:rgba(0,245,255,0.05);
+    color:var(--cyan); font-family:'Orbitron',monospace; font-size:13px; font-weight:700;
+    display:flex; align-items:center; justify-content:center;
+    transition:all .15s;
+  }
+  .kbkey.lit { background:rgba(6,214,160,0.35); border-color:var(--green); color:var(--green); box-shadow:0 0 10px var(--green); }
+  #kbresume { font-size:10px; color:rgba(0,245,255,0.35); letter-spacing:2px; margin-top:4px; }
+
+  /* ── Adapt message ── */
+  #adaptmsg {
+    position:absolute; top:8px; left:50%; transform:translateX(-50%);
+    font-size:10px; color:var(--green); text-shadow:0 0 7px var(--green);
+    letter-spacing:2px; opacity:0; transition:opacity .5s; z-index:9; white-space:nowrap;
+  }
+
+  /* ── Screens ── */
+  .screen {
+    position:absolute; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    background:rgba(2,8,20,0.96); z-index:20; text-align:center; padding:28px;
+  }
+  .screen h1 {
+    font-family:'Orbitron',monospace; font-size:clamp(22px,5vw,46px);
+    font-weight:900; color:var(--cyan);
+    text-shadow:0 0 28px var(--cyan), 0 0 56px var(--cyan);
+    letter-spacing:4px; margin-bottom:10px; animation:flicker 3s infinite;
+  }
+  @keyframes flicker { 0%,100%{opacity:1} 92%{opacity:1} 93%{opacity:.7} 94%{opacity:1} 96%{opacity:.8} 97%{opacity:1} }
+  .screen p { font-size:clamp(10px,1.8vw,13px); color:rgba(0,245,255,0.7); margin:5px 0; letter-spacing:1px; max-width:480px; line-height:1.65; }
+  .aifact { margin-top:14px; padding:10px 18px; background:rgba(0,245,255,0.05); border:1px solid rgba(0,245,255,0.18); border-radius:4px; font-size:10px; color:var(--green); max-width:440px; line-height:1.7; }
+  .aifact strong { color:var(--yellow); }
+  .btn {
+    margin-top:20px; padding:11px 34px;
+    font-family:'Orbitron',monospace; font-size:13px; font-weight:700;
+    letter-spacing:3px; background:transparent;
+    border:2px solid var(--cyan); color:var(--cyan); cursor:pointer;
+    text-transform:uppercase; position:relative; overflow:hidden; transition:all .2s;
+  }
+  .btn::before { content:''; position:absolute; inset:0; background:var(--cyan); transform:scaleX(0); transform-origin:left; transition:transform .2s; z-index:-1; }
+  .btn:hover { color:var(--bg); box-shadow:0 0 18px var(--cyan); }
+  .btn:hover::before { transform:scaleX(1); }
+  #dbar { margin-top:8px; width:180px; height:5px; background:rgba(0,245,255,0.12); border-radius:3px; overflow:hidden; }
+  #dfill { height:100%; background:linear-gradient(to right,var(--green),var(--yellow),var(--pink)); border-radius:3px; transition:width 1s ease; }
+</style>
+</head>
+<body>
+<div id="wrap">
+
+  <!-- HUD -->
+  <div id="hud">
+    <div class="hb"><span class="hl">SCORE</span><span class="hv" id="sc">0</span></div>
+    <div class="hb"><span class="hl">LIVES</span><span class="hv" id="lv">❤️❤️❤️</span></div>
+    <div id="ttl">AI BLASTER</div>
+    <div class="hb"><span class="hl">LEVEL</span><span class="hv" id="ll">1</span></div>
+    <div class="hb"><span class="hl">BOMBS</span><span class="hv" id="bm">💣💣💣</span></div>
+    <button id="bomb-btn" onclick="useBomb()">💣 BOMB [B]</button>
+  </div>
+
+  <!-- Keywords bar -->
+  <div id="kwbar"><span id="kwlabel">🤖 AI KEYWORDS:</span></div>
+
+  <!-- Game area -->
+  <div id="area">
+    <canvas id="cv"></canvas>
+    <div id="adaptmsg"></div>
+
+    <!-- Word challenge panel -->
+    <div id="word-panel">
+      <div id="wlabel">⚡ WORD CHALLENGE — TYPE IT FAST!</div>
+      <div id="wtarget"></div>
+      <div id="wtyped"></div>
+      <div id="wtbar"><div id="wtfill"></div></div>
+    </div>
+
+    <!-- Bomb flash -->
+    <div id="bflash"></div>
+
+    <!-- Keyboard cheat sheet overlay -->
+    <div id="kbover">
+      <h2>💣 CHEAT SHEET — KEYBOARD MAP</h2>
+      <div class="kbrow" id="kr1"></div>
+      <div class="kbrow" id="kr2"></div>
+      <div class="kbrow" id="kr3"></div>
+      <div id="kbresume">PRESS ANY KEY OR WAIT 5s TO CONTINUE...</div>
+    </div>
+
+    <!-- Type indicator -->
+    <div id="type-strip">
+      <div id="hint-txt">TYPE THE FALLING LETTER TO SHOOT ↑</div>
+      <div id="typed-key"></div>
+    </div>
+  </div>
+</div>
+
+<!-- START SCREEN -->
+<div class="screen" id="ss">
+  <h1>AI BLASTER</h1>
+  <p>⌨️ <strong style="color:var(--green)">Type the falling letter</strong> on your keyboard — the drone auto-aims and fires!</p>
+  <p>📝 Level 2+: <strong style="color:var(--yellow)">Type a full word</strong> before the timer runs out!</p>
+  <p>💣 Up to <strong style="color:var(--orange)">3 BOMBS</strong> — shows the full keyboard map when you're stuck! Press [B]</p>
+  <p>🤖 The AI <strong style="color:var(--cyan)">adapts difficulty</strong> based on your accuracy — just like Machine Learning!</p>
+  <div class="aifact"><strong>💡 AI Fact:</strong> Learning to type is a superpower in the AI age — it's how you talk to computers, and to AI!</div>
+  <button class="btn" id="startbtn">START MISSION</button>
+</div>
+
+<!-- GAME OVER SCREEN -->
+<div class="screen" id="gs" style="display:none;position:absolute;">
+  <h1>MISSION END</h1>
+  <p>Final Score: <strong id="fs" style="color:var(--yellow);font-size:22px">0</strong></p>
+  <p>Level Reached: <strong id="fl" style="color:var(--green)">1</strong></p>
+  <p>AI Keywords Collected: <strong id="fk" style="color:var(--cyan)">0</strong></p>
+  <div class="aifact" id="gfact"></div>
+  <button class="btn" id="restartbtn">PLAY AGAIN</button>
+</div>
+
+<!-- LEVEL UP SCREEN -->
+<div class="screen" id="lu" style="display:none;position:absolute;">
+  <h1 style="color:var(--green);text-shadow:0 0 28px var(--green)">LEVEL UP!</h1>
+  <p id="lutext"></p>
+  <div class="aifact" id="lufact"></div>
+  <div id="dbar"><div id="dfill" style="width:10%"></div></div>
+  <p style="margin-top:5px;font-size:9px;color:rgba(0,245,255,0.4)">AI DIFFICULTY METER</p>
+  <button class="btn" id="contbtn">CONTINUE</button>
+</div>
+
+<script>
+// ════════════════════════════════
+//  DATA
+// ════════════════════════════════
+
+const WORD_POOL = {
+  2:['CAT','DOG','SUN','RUN','FUN','HAT','CUP','NET','MAP','FLY'],
+  3:['JUMP','PLAY','STAR','FISH','BIRD','FROG','LAMP','DRUM','BELL','RING'],
+  4:['LUNCH','PLANT','BRAIN','CLOUD','MOUSE','KNIFE','BREAD','BEACH','CLOCK','FLAME'],
+  5:['ROBOT','SMART','LEARN','TRAIN','PIXEL','CHESS','PRINT','SWIFT','BLAST','GRADE'],
+  6:['NEURAL','SENSOR','GADGET','FILTER','SYNTAX','BINARY','MEMORY','VECTOR','OUTPUT','INPUTS'],
+};
+
+const AI_KW = [
+  {word:'ROBOT',  fact:'Robots use AI to sense and move in the world!'},
+  {word:'DATA',   fact:'"Data" means examples — AI learns from millions of them, just like you learn from experience!'},
+  {word:'NEURAL', fact:'Neural networks mimic the human brain — layers of connected "neurons" process information!'},
+  {word:'LEARN',  fact:'Machine Learning means the computer improves automatically, without being given every rule!'},
+  {word:'MODEL',  fact:'An AI model is like a recipe — it tells the AI exactly how to think about a problem!'},
+  {word:'TRAIN',  fact:'Training an AI means showing it thousands of examples so it can spot hidden patterns!'},
+  {word:'CODE',   fact:'Programmers write code to create AI — and you could learn to do this too!'},
+  {word:'PIXEL',  fact:'AI recognizes images by analyzing thousands of tiny dots called pixels!'},
+  {word:'VOICE',  fact:'Voice AI like Siri uses deep learning to understand your speech in real time!'},
+  {word:'SMART',  fact:'AI can seem very smart because it processes huge amounts of data incredibly fast!'},
+];
+
+const AI_FACTS = [
+  'AI can write stories, draw pictures, and even compose music!',
+  'The first AI program was written in 1951 — before most grandparents were born!',
+  'AI learns by finding patterns, just like your brain does when you study!',
+  'Google Translate uses AI to translate 100+ languages almost instantly!',
+  'AI helps doctors find diseases in X-rays faster than humans can!',
+  'Netflix uses AI to recommend shows you might like — that\'s Machine Learning!',
+  'AlphaGo, an AI, beat the world\'s best Go player in 2016!',
+  'Spam filters use AI to keep bad emails out of your inbox!',
+  'Self-driving cars use AI to see the road and make split-second decisions!',
+  'AI assistants process your voice and reply in under one second!',
+];
+
+const KB_ROWS = [
+  ['Q','W','E','R','T','Y','U','I','O','P'],
+  ['A','S','D','F','G','H','J','K','L'],
+  ['Z','X','C','V','B','N','M'],
+];
+
+// ════════════════════════════════
+//  STATE
+// ════════════════════════════════
+
+const G = {
+  score:0, lives:3, level:1, bombs:3,
+  targets:[], bullets:[],
+  droneX:0, droneW:68, droneH:34,
+  droneTargetX:null,
+  gameRunning:false, paused:false,
+  spawnTimer:0, spawnInterval:105,
+  speed:0.9, baseSpeed:0.9,
+  consHits:0, consMiss:0,
+  keywords:new Set(),
+  totalShots:0, totalHits:0,
+  wordMode:false, wordTarget:'', wordTyped:'',
+  wordTimeLeft:0, wordTimeMax:0, wordObj:null,
+  rotorAngle:0,
+};
+
+// ════════════════════════════════
+//  DOM
+// ════════════════════════════════
+
+const cv     = document.getElementById('cv');
+const ctx    = cv.getContext('2d');
+const area   = document.getElementById('area');
+const scEl   = document.getElementById('sc');
+const lvEl   = document.getElementById('lv');
+const llEl   = document.getElementById('ll');
+const bmEl   = document.getElementById('bm');
+const kwBar  = document.getElementById('kwbar');
+const tkEl   = document.getElementById('typed-key');
+const htEl   = document.getElementById('hint-txt');
+const adaptEl= document.getElementById('adaptmsg');
+const wpEl   = document.getElementById('word-panel');
+const wtEl   = document.getElementById('wtarget');
+const wyEl   = document.getElementById('wtyped');
+const wfEl   = document.getElementById('wtfill');
+const bfEl   = document.getElementById('bflash');
+const kbEl   = document.getElementById('kbover');
+
+// ════════════════════════════════
+//  RESIZE
+// ════════════════════════════════
+
+function resize() {
+  cv.width  = area.clientWidth;
+  cv.height = area.clientHeight;
+  if (G.droneX === 0) G.droneX = cv.width/2 - G.droneW/2;
+}
+window.addEventListener('resize', resize);
+
+// ════════════════════════════════
+//  KEYBOARD — core mechanic
+// ════════════════════════════════
+
+window.addEventListener('keydown', e => {
+  if (!G.gameRunning) return;
+  const key = e.key.toUpperCase();
+  if (key === 'B') { useBomb(); return; }
+  if (!/^[A-Z]$/.test(key)) return;
+  e.preventDefault();
+  if (G.paused) { highlightKey(key); return; }
+
+  if (G.wordMode) {
+    handleWordKey(key);
+  } else {
+    handleLetterKey(key);
+  }
+});
+
+// ── Letter mode ──
+function handleLetterKey(key) {
+  const match = G.targets
+    .filter(t => !t.dying && t.label === key && !t.isWord)
+    .sort((a,b) => b.y - a.y)[0];
+
+  G.totalShots++;
+  if (match) {
+    G.totalHits++;
+    G.consHits++;
+    G.consMiss = 0;
+    aimAndFire(match);
+    flashKey(key, true);
+  } else {
+    G.consMiss++;
+    G.consHits = 0;
+    flashKey(key, false);
+    flashWrong();
+    adaptDifficulty();
+  }
+}
+
+// ── Word mode ──
+function handleWordKey(key) {
+  const next = G.wordTarget[G.wordTyped.length];
+  if (!next) return;
+  if (key === next) {
+    G.wordTyped += key;
+    renderWordDisplay();
+    if (G.wordTyped === G.wordTarget) wordDone(true);
+  } else {
+    flashKey(key, false);
+    flashWrong();
+  }
+}
+
+// ── Aim drone then shoot ──
+function aimAndFire(t) {
+  G.droneTargetX = t.x + t.w/2 - G.droneW/2;
+  // bullet will be spawned once drone is close enough (checked in loop)
+  G.pendingTarget = t;
+}
+
+// ════════════════════════════════
+//  SPAWN
+// ════════════════════════════════
+
+function spawnLetter() {
+  const letter = String.fromCharCode(65+Math.floor(Math.random()*26));
+  const isKw   = Math.random()<0.1 && G.level>=2;
+  const kw     = isKw ? AI_KW[Math.floor(Math.random()*AI_KW.length)] : null;
+  const label  = isKw ? kw.word : letter;
+  const w      = isKw ? label.length*13+16 : 52;
+  const x      = Math.random()*(cv.width-w-10)+5;
+  const color  = isKw ? '#06d6a0' : `hsl(${180+Math.random()*60},100%,65%)`;
+
+  G.targets.push({ x, y:-60, w, h:52, label, speed:G.speed*(0.8+Math.random()*0.4), color, isKw, kw, isWord:false, dying:false });
+}
+
+function spawnWord() {
+  const pool  = WORD_POOL[Math.min(G.level,6)];
+  const word  = pool[Math.floor(Math.random()*pool.length)];
+  G.wordTarget   = word;
+  G.wordTyped    = '';
+  G.wordMode     = true;
+  G.wordTimeMax  = word.length * 120; // 2s per letter at 60fps
+  G.wordTimeLeft = G.wordTimeMax;
+
+  const w  = word.length*16+24;
+  const x  = Math.random()*(cv.width-w-10)+5;
+  const obj = { x, y:-70, w, h:52, label:word, speed:G.speed*0.45, color:'#ffbe0b', isKw:false, kw:null, isWord:true, dying:false };
+  G.targets.push(obj);
+  G.wordObj = obj;
+
+  wpEl.style.display = 'block';
+  htEl.textContent = '⚡ TYPE THE WORD ABOVE!';
+  renderWordDisplay();
+}
+
+function renderWordDisplay() {
+  const t = G.wordTyped, r = G.wordTarget.slice(t.length);
+  wtEl.innerHTML = `<span style="color:var(--green)">${t}</span><span style="color:#fff;opacity:0.5">${r}</span>`;
+  wyEl.textContent = t || '...';
+}
+
+function wordDone(success) {
+  G.wordMode = false;
+  wpEl.style.display = 'none';
+  htEl.textContent = 'TYPE THE FALLING LETTER TO SHOOT ↑';
+
+  if (success) {
+    G.score += 500*G.level;
+    G.consHits += 3; G.consMiss = 0;
+    showFeedback('🔥 WORD DONE! +'+500*G.level, '#ffbe0b');
+    if (G.wordObj) {
+      boom(G.wordObj.x+G.wordObj.w/2, G.wordObj.y+G.wordObj.h/2, '#ffbe0b', '💥');
+      G.targets = G.targets.filter(t=>t!==G.wordObj);
+    }
+    scEl.textContent = G.score;
+    adaptDifficulty();
+    checkLevelUp();
+  } else {
+    G.lives--;
+    G.consMiss += 2; G.consHits = 0;
+    G.targets = G.targets.filter(t=>t!==G.wordObj);
+    updateLives();
+    showFeedback('⏱ TIME OUT!', '#ff006e');
+  }
+  G.wordObj = null; G.wordTarget=''; G.wordTyped='';
+}
+
+// ════════════════════════════════
+//  BOMB
+// ════════════════════════════════
+
+function useBomb() {
+  if (G.bombs<=0 || !G.gameRunning) return;
+  G.bombs--;
+  bmEl.textContent = '💣'.repeat(G.bombs)||'—';
+  if (G.bombs===0) document.getElementById('bomb-btn').classList.add('disabled');
+
+  bfEl.style.opacity='1';
+  setTimeout(()=>bfEl.style.opacity='0', 350);
+
+  G.paused = true;
+  buildKb();
+  kbEl.style.display='flex';
+
+  let resumed = false;
+  const resume = () => {
+    if (resumed) return; resumed=true;
+    kbEl.style.display='none';
+    G.paused=false;
+    window.removeEventListener('keydown', resume);
+  };
+  window.addEventListener('keydown', resume, {once:true});
+  setTimeout(resume, 5000);
+}
+
+function buildKb() {
+  KB_ROWS.forEach((row,i) => {
+    const el = document.getElementById('kr'+(i+1));
+    el.innerHTML='';
+    row.forEach(k => {
+      const d=document.createElement('div');
+      d.className='kbkey'; d.id='kk-'+k; d.textContent=k;
+      el.appendChild(d);
+    });
+  });
+}
+
+function highlightKey(k) {
+  const el=document.getElementById('kk-'+k);
+  if (!el) return;
+  el.classList.add('lit');
+  setTimeout(()=>el.classList.remove('lit'), 300);
+}
+
+// ════════════════════════════════
+//  ADAPTIVE DIFFICULTY
+// ════════════════════════════════
+
+function adaptDifficulty() {
+  if (G.consHits >= 6) {
+    G.speed = Math.min(G.baseSpeed+1.2, G.speed+0.2);
+    G.spawnInterval = Math.max(50, G.spawnInterval-10);
+    showAdapt('⚡ AI: Great accuracy! Speeding up...');
+    G.consHits=0;
+  } else if (G.consMiss >= 4) {
+    G.speed = Math.max(G.baseSpeed*0.65, G.speed-0.18);
+    G.spawnInterval = Math.min(190, G.spawnInterval+14);
+    showAdapt('🤖 AI: Slowing down to help you learn...');
+    G.consMiss=0;
+  }
+}
+
+function showAdapt(txt) {
+  adaptEl.textContent=txt; adaptEl.style.opacity='1';
+  clearTimeout(adaptEl._t);
+  adaptEl._t=setTimeout(()=>adaptEl.style.opacity='0',2600);
+}
+
+// ════════════════════════════════
+//  LEVEL UP
+// ════════════════════════════════
+
+function checkLevelUp() {
+  if (G.score >= G.level*1200) {
+    G.level++;
+    G.baseSpeed += 0.18; G.speed=G.baseSpeed;
+    llEl.textContent=G.level;
+    G.paused=true;
+    const fact=AI_FACTS[Math.floor(Math.random()*AI_FACTS.length)];
+    document.getElementById('lutext').textContent =
+      `LEVEL ${G.level}! ${G.level>=2?'Word challenges now active — type full words!':'Targets are faster!'}`;
+    document.getElementById('lufact').innerHTML=`<strong>🤖 AI Fact:</strong> ${fact}`;
+    document.getElementById('dfill').style.width=Math.min(95,(G.level-1)*14)+'%';
+    document.getElementById('lu').style.display='flex';
+  }
+}
+document.getElementById('contbtn').onclick=()=>{
+  document.getElementById('lu').style.display='none'; G.paused=false;
+};
+
+// ════════════════════════════════
+//  LIVES / GAMEOVER
+// ════════════════════════════════
+
+function updateLives() {
+  lvEl.textContent='❤️'.repeat(Math.max(0,G.lives))||'💀';
+  if (G.lives<=0) gameOver();
+}
+
+function gameOver() {
+  G.gameRunning=false;
+  const fact=AI_FACTS[Math.floor(Math.random()*AI_FACTS.length)];
+  document.getElementById('fs').textContent=G.score;
+  document.getElementById('fl').textContent=G.level;
+  document.getElementById('fk').textContent=G.keywords.size;
+  document.getElementById('gfact').innerHTML=`<strong>🤖 AI Fact:</strong> ${fact}`;
+  document.getElementById('gs').style.display='flex';
+}
+
+// ════════════════════════════════
+//  FEEDBACK
+// ════════════════════════════════
+
+let fbTimer;
+function showFeedback(txt,color) {
+  let el=document.getElementById('fbmsg');
+  if (!el) {
+    el=document.createElement('div'); el.id='fbmsg';
+    el.style.cssText=`position:absolute;top:38%;left:50%;transform:translate(-50%,-50%);
+      font-family:'Orbitron',monospace;font-size:16px;font-weight:900;pointer-events:none;
+      z-index:15;text-align:center;transition:opacity .4s;letter-spacing:2px;`;
+    area.appendChild(el);
+  }
+  el.textContent=txt; el.style.color=color;
+  el.style.textShadow=`0 0 18px ${color}`; el.style.opacity='1';
+  clearTimeout(fbTimer); fbTimer=setTimeout(()=>el.style.opacity='0',900);
+}
+
+function flashKey(k,hit) {
+  tkEl.textContent=k;
+  tkEl.style.color    = hit?'var(--green)':'var(--pink)';
+  tkEl.style.textShadow = hit?'0 0 12px var(--green)':'0 0 12px var(--pink)';
+  clearTimeout(tkEl._t);
+  tkEl._t=setTimeout(()=>{ tkEl.textContent=''; tkEl.style.color='var(--cyan)'; },450);
+}
+
+function flashWrong() {
+  let el=document.getElementById('wrongfl');
+  if (!el) {
+    el=document.createElement('div'); el.id='wrongfl';
+    el.style.cssText=`position:absolute;inset:0;background:rgba(255,0,110,0.1);
+      pointer-events:none;z-index:11;opacity:0;transition:opacity .2s;`;
+    area.appendChild(el);
+  }
+  el.style.opacity='1'; setTimeout(()=>el.style.opacity='0',200);
+}
+
+function boom(x,y,color,label) {
+  const el=document.createElement('div');
+  el.style.cssText=`position:absolute;left:${x}px;top:${y}px;color:${color};
+    font-family:'Orbitron',monospace;font-size:18px;font-weight:900;
+    pointer-events:none;z-index:16;text-shadow:0 0 14px ${color};
+    animation:expl .5s ease forwards;`;
+  el.textContent=label.length>4?'💥':label;
+  area.appendChild(el);
+  setTimeout(()=>el.remove(),500);
+}
+
+function collectKw(kw) {
+  if (G.keywords.has(kw.word)) return;
+  G.keywords.add(kw.word);
+  const b=document.createElement('span');
+  b.className='kwbadge'; b.textContent=kw.word; b.title=kw.fact;
+  kwBar.appendChild(b);
+  showFeedback('🔑 KEYWORD: '+kw.word,'#06d6a0');
+}
+
+// ════════════════════════════════
+//  START
+// ════════════════════════════════
+
+function startGame() {
+  ['ss','gs','lu'].forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
+  kbEl.style.display='none'; wpEl.style.display='none';
+
+  const kwLabel=document.getElementById('kwlabel');
+  kwBar.innerHTML=''; kwBar.appendChild(kwLabel);
+
+  Object.assign(G,{
+    score:0,lives:3,level:1,bombs:3,
+    targets:[],bullets:[],
+    droneTargetX:null, pendingTarget:null,
+    gameRunning:true,paused:false,
+    spawnTimer:0,spawnInterval:105,
+    speed:0.9,baseSpeed:0.9,
+    consHits:0,consMiss:0,
+    keywords:new Set(),
+    totalShots:0,totalHits:0,
+    wordMode:false,wordTarget:'',wordTyped:'',wordTimeLeft:0,wordTimeMax:0,wordObj:null,
+    rotorAngle:0,
+  });
+
+  scEl.textContent='0'; llEl.textContent='1';
+  lvEl.textContent='❤️❤️❤️'; bmEl.textContent='💣💣💣';
+  tkEl.textContent=''; htEl.textContent='TYPE THE FALLING LETTER TO SHOOT ↑';
+  document.getElementById('bomb-btn').classList.remove('disabled');
+  G.droneX = cv.width/2 - G.droneW/2;
+
+  resize();
+  requestAnimationFrame(loop);
+}
+
+document.getElementById('startbtn').onclick   = startGame;
+document.getElementById('restartbtn').onclick = startGame;
+
+// ════════════════════════════════
+//  DRAW DRONE
+// ════════════════════════════════
+
+function drawDrone(x,y) {
+  const w=G.droneW, h=G.droneH;
+  ctx.save();
+
+  // Subtle engine glow
+  ctx.shadowColor='rgba(0,245,255,0.4)'; ctx.shadowBlur=20;
+  ctx.fillStyle='rgba(0,245,255,0.08)';
+  ctx.beginPath();
+  ctx.ellipse(x+w/2, y+h+3, 18,5,0,0,Math.PI*2);
+  ctx.fill();
+
+  // Arms
+  ctx.shadowBlur=6; ctx.strokeStyle='rgba(0,245,255,0.55)'; ctx.lineWidth=1.5;
+  [[x+8,y+5],[x+w-8,y+5],[x+8,y+h-5],[x+w-8,y+h-5]].forEach(([ax,ay])=>{
+    ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(x+w/2,y+h/2); ctx.stroke();
+  });
+
+  // Body
+  ctx.shadowColor='#00f5ff'; ctx.shadowBlur=14;
+  ctx.fillStyle='rgba(0,245,255,0.1)'; ctx.strokeStyle='#00f5ff'; ctx.lineWidth=2;
+  rr(x+12,y+6,w-24,h-12,5); ctx.fill(); ctx.stroke();
+
+  // Camera lens
+  ctx.fillStyle='rgba(0,245,255,0.5)';
+  ctx.beginPath(); ctx.arc(x+w/2,y+h/2+1,4,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,0.7)';
+  ctx.beginPath(); ctx.arc(x+w/2-1,y+h/2,1.5,0,Math.PI*2); ctx.fill();
+
+  // Rotors (spinning)
+  const ra=G.rotorAngle;
+  [[x+8,y+5],[x+w-8,y+5],[x+8,y+h-5],[x+w-8,y+h-5]].forEach(([rx,ry])=>{
+    ctx.shadowBlur=8;
+    ctx.strokeStyle='rgba(0,245,255,0.7)'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.arc(rx,ry,7,0,Math.PI*2); ctx.stroke();
+    // Spinning blades
+    ctx.strokeStyle='rgba(0,245,255,0.9)'; ctx.lineWidth=2;
+    [0,1].forEach(k=>{
+      const a=ra+k*Math.PI/2;
+      ctx.beginPath();
+      ctx.moveTo(rx+Math.cos(a)*7, ry+Math.sin(a)*7);
+      ctx.lineTo(rx+Math.cos(a+Math.PI)*7, ry+Math.sin(a+Math.PI)*7);
+      ctx.stroke();
+    });
+  });
+
+  ctx.restore();
+}
+
+function rr(x,y,w,h,r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
+}
+
+// ════════════════════════════════
+//  DRAW TARGETS
+// ════════════════════════════════
+
+function drawTargets() {
+  G.targets.forEach(t=>{
+    ctx.save();
+    ctx.shadowColor=t.color; ctx.shadowBlur=16;
+    ctx.fillStyle='rgba(0,0,0,0.75)';
+    rr(t.x,t.y,t.w,t.h,6); ctx.fill();
+    ctx.strokeStyle=t.color; ctx.lineWidth=2;
+    rr(t.x,t.y,t.w,t.h,6); ctx.stroke();
+    ctx.shadowBlur=8; ctx.fillStyle=t.color;
+    ctx.font=`bold ${t.isKw||t.isWord?13:26}px Orbitron,monospace`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(t.label, t.x+t.w/2, t.y+t.h/2);
+    ctx.restore();
+  });
+}
+
+// ════════════════════════════════
+//  DRAW BULLETS
+// ════════════════════════════════
+
+function drawBullets() {
+  G.bullets.forEach(b=>{
+    ctx.save();
+    ctx.shadowColor='#ffbe0b'; ctx.shadowBlur=14;
+    ctx.fillStyle='#ffbe0b';
+    ctx.fillRect(b.x-2,b.y-16,4,16);
+    ctx.restore();
+  });
+}
+
+// ════════════════════════════════
+//  MAIN LOOP
+// ════════════════════════════════
+
+// CSS animation for explosions
+const st=document.createElement('style');
+st.textContent='@keyframes expl{0%{transform:scale(.4);opacity:1}100%{transform:scale(2.8);opacity:0}}';
+document.head.appendChild(st);
+
+function loop() {
+  if (!G.gameRunning) return;
+  ctx.clearRect(0,0,cv.width,cv.height);
+
+  if (!G.paused) {
+    G.rotorAngle += 0.35;
+
+    // Drone glides toward target
+    if (G.droneTargetX !== null) {
+      const dx = G.droneTargetX - G.droneX;
+      const step = 20;
+      if (Math.abs(dx) <= step) {
+        G.droneX = G.droneTargetX;
+        G.droneTargetX = null;
+        // Fire bullet NOW
+        if (G.pendingTarget) {
+          G.bullets.push({x:G.droneX+G.droneW/2, y:cv.height-95, vy:-18, target:G.pendingTarget});
+          // Remove target immediately (typed = destroyed)
+          const t=G.pendingTarget;
+          G.targets=G.targets.filter(x=>x!==t);
+          boom(t.x+t.w/2, t.y+t.h/2, t.color, t.label);
+          if (t.isKw) { G.score+=150*G.level; collectKw(t.kw); }
+          else G.score+=50*G.level;
+          scEl.textContent=G.score;
+          G.pendingTarget=null;
+          adaptDifficulty();
+          checkLevelUp();
+        }
+      } else {
+        G.droneX += Math.sign(dx)*step;
+      }
+    }
+
+    // Move bullets
+    for (let i=G.bullets.length-1;i>=0;i--) {
+      G.bullets[i].y += G.bullets[i].vy;
+      if (G.bullets[i].y < -20) G.bullets.splice(i,1);
+    }
+
+    // Move targets
+    for (let i=G.targets.length-1;i>=0;i--) {
+      const t=G.targets[i];
+      t.y += t.speed;
+      if (t.y > cv.height+10) {
+        G.targets.splice(i,1);
+        if (t.isWord && t===G.wordObj) {
+          wordDone(false);
+        } else if (!t.isKw && !t.isWord) {
+          G.consMiss++;
+          G.consHits=0;
+          adaptDifficulty();
+        }
+      }
+    }
+
+    // Word timer
+    if (G.wordMode) {
+      G.wordTimeLeft--;
+      const pct=Math.max(0,G.wordTimeLeft/G.wordTimeMax*100);
+      wfEl.style.width=pct+'%';
+      wfEl.style.background=pct>50?'var(--yellow)':pct>25?'var(--orange)':'var(--pink)';
+      if (G.wordTimeLeft<=0) wordDone(false);
+    }
+
+    // Spawn
+    G.spawnTimer++;
+    if (!G.wordMode && G.spawnTimer>=G.spawnInterval) {
+      G.spawnTimer=0;
+      const wc = G.level>=2 ? 0.16 : 0;
+      if (Math.random()<wc && G.score>500) spawnWord();
+      else spawnLetter();
+    }
+  }
+
+  drawTargets();
+  drawBullets();
+  drawDrone(G.droneX, cv.height-90);
+
+  requestAnimationFrame(loop);
+}
+
+// ════════════════════════════════
+//  INIT
+// ════════════════════════════════
+resize();
+</script>
+</body>
+</html>
